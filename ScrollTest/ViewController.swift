@@ -50,6 +50,7 @@ class ViewController: UIViewController {
   }
   
   var startOffset: CGPoint = .zero
+  var isChromeHidden: Bool = false
   
   @objc
   func handlePan(_ panGestureRecognizer: UIPanGestureRecognizer) {
@@ -70,46 +71,50 @@ class ViewController: UIViewController {
 extension ViewController: UIScrollViewDelegate {
   
   func didScroll(yOffsetChange: CGFloat) {
-    let maximumOffset = topBarHeight
+    let animationTriggerOffsetThreshold = CGFloat(30)
+    let animationFractionComplete = abs(yOffsetChange) / animationTriggerOffsetThreshold
+    let animationTriggerFractionThreshold = CGFloat(0.6)
+    let isDownward = yOffsetChange < 0
     
-    // To prevent the scroll view content from scrolling below the header view,
-    // its content offset is kept at its origin value (0) until the header view is fully scrolled.
-    let currentOffset = scrollView.contentOffset.y + scrollView.contentInset.top - topBarTopAnchorConstraint.constant
-    if currentOffset > 0 && currentOffset < maximumOffset {
-      scrollView.contentOffset.y = -scrollView.contentInset.top
-    }
-    
-    topBarTopAnchorConstraint.constant = -min(max(currentOffset, 0), maximumOffset)
-    
-    if let tabBar = tabBarController?.tabBar {
-      tabBar.frame.origin.y = UIScreen.main.bounds.height + min(max(currentOffset, 0), maximumOffset) - tabBar.frame.size.height
+    if isDownward {
+      if isChromeHidden { return }
       
-      additionalSafeAreaInsets.bottom = -min(max(currentOffset, 0), maximumOffset)
+      if animationFractionComplete >= animationTriggerFractionThreshold {
+        isChromeHidden = true
+        UIView.animate(withDuration: 0.2) { [weak self] in
+          guard let self = self else { return }
+          
+          let maximumOffset = self.topBarHeight
+          
+          self.topBarTopAnchorConstraint.constant = -maximumOffset
+          if let tabBar = self.tabBarController?.tabBar {
+            tabBar.frame.origin.y = UIScreen.main.bounds.height + maximumOffset - tabBar.frame.height
+            self.additionalSafeAreaInsets.bottom = -maximumOffset
+          }
+          self.view.layoutIfNeeded()
+        }
+      }
+    } else {
+      if !isChromeHidden { return }
+      
+      if animationFractionComplete >= animationTriggerFractionThreshold {
+        isChromeHidden = false
+        UIView.animate(withDuration: 0.2) { [weak self] in
+          guard let self = self else { return }
+          
+          self.topBarTopAnchorConstraint.constant = 0
+          if let tabBar = self.tabBarController?.tabBar {
+            tabBar.frame.origin.y = UIScreen.main.bounds.height - tabBar.frame.height
+            self.additionalSafeAreaInsets.bottom = 0
+          }
+          self.view.layoutIfNeeded()
+        }
+      }
     }
   }
   
   func didEndPanning() {
-    UIView.animate(withDuration: 0.2) { [weak self] in
-      guard let self = self else { return }
-      
-      let maximumOffset = self.topBarHeight
-      
-      let currentOffset = self.scrollView.contentOffset.y + self.scrollView.contentInset.top - self.topBarTopAnchorConstraint.constant
-      if currentOffset > maximumOffset / 2 {
-        self.topBarTopAnchorConstraint.constant = -maximumOffset
-        if let tabBar = self.tabBarController?.tabBar {
-          tabBar.frame.origin.y = UIScreen.main.bounds.height + maximumOffset - tabBar.frame.size.height
-          self.additionalSafeAreaInsets.bottom = -maximumOffset
-        }
-      } else {
-        self.topBarTopAnchorConstraint.constant = 0
-        if let tabBar = self.tabBarController?.tabBar {
-          tabBar.frame.origin.y = UIScreen.main.bounds.height - tabBar.frame.size.height
-          self.additionalSafeAreaInsets.bottom = 0
-        }
-      }
-      self.view.layoutIfNeeded()
-    }
+    
   }
 }
 
